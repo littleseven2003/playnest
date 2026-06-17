@@ -92,4 +92,18 @@ export class GuessWordService {
   getWordList() {
     return words.map(({ word, category }) => ({ word, category }))
   }
+
+  getDebugInfo(gameId: string) {
+    const session = sessions.get(gameId)
+    if (!session) {
+      throw new Error('游戏不存在或已过期')
+    }
+
+    return {
+      gameId: session.gameId,
+      target: session.target.word,
+      category: session.target.category,
+      guessCount: session.guessCount
+    }
+  }
 }

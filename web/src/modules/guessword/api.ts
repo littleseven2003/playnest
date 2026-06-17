@@ -1,4 +1,4 @@
-import type { ApiResponse, GuessResponse } from './types'
+import type { ApiResponse, GuessDebugInfo, GuessResponse } from './types'
 
 async function request<T>(url: string, options?: RequestInit) {
   const response = await fetch(url, {
@@ -25,4 +25,8 @@ export function submitGuess(gameId: string, word: string) {
     method: 'POST',
     body: JSON.stringify({ gameId, word })
   })
+}
+
+export function getGuessDebugInfo(gameId: string) {
+  return request<GuessDebugInfo>(`/api/guessword/debug/${gameId}`)
 }

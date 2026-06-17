@@ -59,9 +59,19 @@
 }
 
 .guessword__win,
+.guessword__debug,
 .form-error {
   margin: 0;
   font-weight: 800;
+}
+
+.guessword__debug {
+  width: fit-content;
+  border: 1px dashed rgba(31, 157, 122, 0.42);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: rgba(31, 157, 122, 0.08);
+  color: #15715a;
 }
 
 .guessword__win {

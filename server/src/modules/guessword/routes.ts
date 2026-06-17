@@ -30,6 +30,22 @@ router.get('/wordlist', (_req, res) => {
   res.json({ success: true, data: service.getWordList() })
 })
 
+router.get('/debug/:gameId', (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    res.status(404).json({ success: false, message: '接口不存在' })
+    return
+  }
+
+  try {
+    res.json({ success: true, data: service.getDebugInfo(req.params.gameId) })
+  } catch (error) {
+    res.status(404).json({
+      success: false,
+      message: error instanceof Error ? error.message : '调试信息不存在'
+    })
+  }
+})
+
 export default {
   path: '/api/guessword',
   router

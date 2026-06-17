@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import Layout from '@/components/Layout.vue'
-import { startGuessWordGame, submitGuess } from './api'
+import { getGuessDebugInfo, startGuessWordGame, submitGuess } from './api'
 import type { GuessItem } from './types'
 import './styles.scss'
 
@@ -10,6 +10,7 @@ const word = ref('')
 const error = ref('')
 const loading = ref(false)
 const won = ref(false)
+const debugTarget = ref('')
 const history = ref<GuessItem[]>([])
 
 const sortedHistory = computed(() => [...history.value].sort((a, b) => b.similarity - a.similarity))
@@ -18,11 +19,13 @@ async function resetGame() {
   loading.value = true
   error.value = ''
   won.value = false
+  debugTarget.value = ''
   history.value = []
 
   try {
     const result = await startGuessWordGame()
     gameId.value = result.gameId
+    await loadDebugInfo(result.gameId)
   } catch (err) {
     error.value = err instanceof Error ? err.message : '游戏启动失败'
   } finally {
@@ -31,7 +34,16 @@ async function resetGame() {
 }
 
 async function guess() {
-  if (!word.value.trim() || loading.value || won.value) {
+  const normalizedWord = word.value.trim()
+
+  if (!normalizedWord || loading.value || won.value) {
+    return
+  }
+
+  const repeatedGuess = history.value.find((item) => item.word === normalizedWord)
+  if (repeatedGuess) {
+    error.value = `“${normalizedWord}”已经猜过了，相似度为 ${repeatedGuess.similarity}%`
+    word.value = ''
     return
   }
 
@@ -39,7 +51,7 @@ async function guess() {
   error.value = ''
 
   try {
-    const result = await submitGuess(gameId.value, word.value)
+    const result = await submitGuess(gameId.value, normalizedWord)
     history.value.push({ ...result, id: `${result.word}-${Date.now()}` })
     won.value = result.isCorrect
     word.value = ''
@@ -47,6 +59,15 @@ async function guess() {
     error.value = err instanceof Error ? err.message : '提交失败'
   } finally {
     loading.value = false
+  }
+}
+
+async function loadDebugInfo(currentGameId: string) {
+  try {
+    const result = await getGuessDebugInfo(currentGameId)
+    debugTarget.value = result.target
+  } catch {
+    debugTarget.value = ''
   }
 }
 
@@ -79,6 +100,7 @@ onMounted(resetGame)
           </button>
         </div>
         <p v-if="error" class="form-error">{{ error }}</p>
+        <p v-if="debugTarget" class="guessword__debug">调试目标词：{{ debugTarget }}</p>
         <p v-if="won" class="guessword__win">猜中了！共 {{ history.length }} 次。</p>
       </form>
 
