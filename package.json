@@ -1,0 +1,13 @@
+{
+  "name": "playnest",
+  "version": "0.1.0",
+  "private": true,
+  "description": "自托管个人小游戏集合平台",
+  "scripts": {
+    "dev": "pnpm --parallel --filter playnest-web --filter playnest-server dev",
+    "build": "pnpm --recursive build",
+    "lint": "pnpm --recursive lint",
+    "typecheck": "pnpm --recursive typecheck"
+  },
+  "packageManager": "pnpm@9.15.4"
+}

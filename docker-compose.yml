@@ -1,0 +1,23 @@
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: playnest-server
+    restart: unless-stopped
+    ports:
+      - "${SERVER_PORT:-3001}:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: playnest-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - server
