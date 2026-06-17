@@ -3,6 +3,7 @@ export interface GuessResponse {
   similarity: number
   isCorrect: boolean
   guessCount: number
+  message?: string
 }
 
 export interface GuessItem extends GuessResponse {

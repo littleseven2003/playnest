@@ -53,6 +53,9 @@ async function guess() {
   try {
     const result = await submitGuess(gameId.value, normalizedWord)
     history.value.push({ ...result, id: `${result.word}-${Date.now()}` })
+    if (result.message) {
+      error.value = result.message
+    }
     won.value = result.isCorrect
     word.value = ''
   } catch (err) {

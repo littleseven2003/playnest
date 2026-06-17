@@ -3,7 +3,9 @@ export interface WordEntry {
   word: string
   pinyin: string
   category: string
+  aliases: string[]
   related: string[]
+  hints: string[]
 }
 
 export interface GuessSession {
@@ -18,4 +20,5 @@ export interface GuessResult {
   similarity: number
   isCorrect: boolean
   guessCount: number
+  message?: string
 }

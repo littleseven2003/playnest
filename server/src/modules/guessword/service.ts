@@ -5,9 +5,23 @@ import { clampScore } from '../../shared/utils/score.js'
 
 const words = wordsData.words as WordEntry[]
 const sessions = new Map<string, GuessSession>()
+const wordIndex = new Map<string, WordEntry>()
+
+for (const entry of words) {
+  wordIndex.set(entry.word, entry)
+  for (const term of [...entry.aliases, ...entry.related, ...entry.hints]) {
+    if (!wordIndex.has(term)) {
+      wordIndex.set(term, entry)
+    }
+  }
+}
 
 function pickWord() {
   return words[Math.floor(Math.random() * words.length)]
+}
+
+function uniqueChars(value: string) {
+  return new Set([...value])
 }
 
 function charOverlap(a: string, b: string) {
@@ -18,20 +32,40 @@ function charOverlap(a: string, b: string) {
   return union === 0 ? 0 : intersection / union
 }
 
-function relatedScore(guess: string, target: WordEntry) {
-  if (target.related.includes(guess)) {
-    return 78
+function repeatedCharRatio(value: string) {
+  return 1 - uniqueChars(value).size / value.length
+}
+
+function validateGuess(word: string) {
+  if (!/^[\u4e00-\u9fa5]{1,8}$/.test(word)) {
+    return '请输入 1-8 个中文字符'
   }
 
-  const bestRelatedOverlap = target.related.reduce((best, related) => {
-    return Math.max(best, charOverlap(guess, related))
+  if (word.length >= 3 && uniqueChars(word).size === 1) {
+    return '输入质量太低，请不要重复堆叠同一个字'
+  }
+
+  if (word.length >= 4 && repeatedCharRatio(word) >= 0.5) {
+    return '输入质量太低，请换一个更具体的词'
+  }
+
+  return ''
+}
+
+function termListScore(guess: string, terms: string[], exactScore: number, fuzzyScore: number) {
+  if (terms.includes(guess)) {
+    return exactScore
+  }
+
+  const bestOverlap = terms.reduce((best, term) => {
+    return Math.max(best, charOverlap(guess, term))
   }, 0)
 
-  return bestRelatedOverlap * 58
+  return bestOverlap * fuzzyScore
 }
 
 function categoryScore(guess: string, target: WordEntry) {
-  const guessedWord = words.find((item) => item.word === guess)
+  const guessedWord = wordIndex.get(guess)
   if (!guessedWord) {
     return 0
   }
@@ -40,8 +74,20 @@ function categoryScore(guess: string, target: WordEntry) {
     return 34
   }
 
-  const sharedRelated = guessedWord.related.filter((item) => target.related.includes(item)).length
-  return Math.min(28, sharedRelated * 7)
+  const guessedTerms = new Set([...guessedWord.aliases, ...guessedWord.related, ...guessedWord.hints])
+  const targetTerms = new Set([...target.aliases, ...target.related, ...target.hints])
+  const sharedTerms = [...guessedTerms].filter((item) => targetTerms.has(item)).length
+  return Math.min(30, sharedTerms * 6)
+}
+
+function lexicalScore(guess: string, target: WordEntry) {
+  return Math.max(
+    charOverlap(guess, target.word) * 62,
+    termListScore(guess, target.aliases, 92, 72),
+    termListScore(guess, target.related, 78, 54),
+    termListScore(guess, target.hints, 56, 38),
+    categoryScore(guess, target)
+  )
 }
 
 export class GuessWordService {
@@ -70,16 +116,21 @@ export class GuessWordService {
 
     session.guessCount += 1
 
+    const qualityMessage = validateGuess(normalizedWord)
+    if (qualityMessage) {
+      return {
+        word: normalizedWord,
+        similarity: 0,
+        isCorrect: false,
+        guessCount: session.guessCount,
+        message: qualityMessage
+      }
+    }
+
     const isCorrect = normalizedWord === session.target.word
     const similarity = isCorrect
       ? 100
-      : clampScore(
-          Math.max(
-            charOverlap(normalizedWord, session.target.word) * 72,
-            relatedScore(normalizedWord, session.target),
-            categoryScore(normalizedWord, session.target)
-          ) + Math.min(8, normalizedWord.length * 1.2)
-        )
+      : clampScore(lexicalScore(normalizedWord, session.target))
 
     return {
       word: normalizedWord,
