@@ -37,6 +37,10 @@ npx pnpm@9.15.4 dev
 pnpm dev
 pnpm build
 pnpm lint
+
+# 重新生成猜词 SQLite 词库
+cd server
+npm run build:lexicon
 ```
 
 开发服务默认地址：

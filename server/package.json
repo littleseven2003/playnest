@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "build:lexicon": "node scripts/build-guessword-db.mjs 20000",
     "build": "tsc",
     "start": "node dist/index.js",
     "lint": "tsc --noEmit",

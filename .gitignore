@@ -37,10 +37,13 @@ __pycache__/
 # Database / Runtime
 *.db
 *.sqlite
+*.sqlite-shm
+*.sqlite-wal
 *.sqlite3
 data/
 !server/src/modules/**/data/
 !server/src/modules/**/data/*.json
+!server/src/modules/**/data/*.sqlite
 uploads/
 tmp/
 temp/

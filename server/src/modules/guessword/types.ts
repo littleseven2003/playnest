@@ -10,7 +10,15 @@ export interface WordEntry {
 
 export interface GuessSession {
   gameId: string
-  target: WordEntry
+  target: {
+    id: number
+    word: string
+    normalizedWord: string
+    pinyin: string
+    category: string
+    frequency: number
+    enabled: number
+  }
   guessCount: number
   createdAt: number
 }

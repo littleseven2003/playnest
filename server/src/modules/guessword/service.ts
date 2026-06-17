@@ -1,23 +1,14 @@
 import { randomUUID } from 'node:crypto'
-import wordsData from './data/words.json' with { type: 'json' }
-import type { GuessResult, GuessSession, WordEntry } from './types.js'
+import type { GuessResult, GuessSession } from './types.js'
+import { getRelationKey, loadLexiconIndex, type LexiconTerm } from './storage/lexicon-repository.js'
 import { clampScore } from '../../shared/utils/score.js'
 
-const words = wordsData.words as WordEntry[]
+const lexicon = loadLexiconIndex()
 const sessions = new Map<string, GuessSession>()
-const wordIndex = new Map<string, WordEntry>()
-
-for (const entry of words) {
-  wordIndex.set(entry.word, entry)
-  for (const term of [...entry.aliases, ...entry.related, ...entry.hints]) {
-    if (!wordIndex.has(term)) {
-      wordIndex.set(term, entry)
-    }
-  }
-}
+const playableTerms = lexicon.terms.filter((term) => term.enabled)
 
 function pickWord() {
-  return words[Math.floor(Math.random() * words.length)]
+  return playableTerms[Math.floor(Math.random() * playableTerms.length)]
 }
 
 function uniqueChars(value: string) {
@@ -25,8 +16,8 @@ function uniqueChars(value: string) {
 }
 
 function charOverlap(a: string, b: string) {
-  const aSet = new Set([...a])
-  const bSet = new Set([...b])
+  const aSet = uniqueChars(a)
+  const bSet = uniqueChars(b)
   const intersection = [...aSet].filter((char) => bSet.has(char)).length
   const union = new Set([...aSet, ...bSet]).size
   return union === 0 ? 0 : intersection / union
@@ -52,41 +43,54 @@ function validateGuess(word: string) {
   return ''
 }
 
-function termListScore(guess: string, terms: string[], exactScore: number, fuzzyScore: number) {
-  if (terms.includes(guess)) {
-    return exactScore
-  }
-
-  const bestOverlap = terms.reduce((best, term) => {
-    return Math.max(best, charOverlap(guess, term))
-  }, 0)
-
-  return bestOverlap * fuzzyScore
+function directRelationScore(target: LexiconTerm, guess: LexiconTerm) {
+  const relation = lexicon.directRelationByPair.get(getRelationKey(target.id, guess.id))
+  return relation ? relation.weight * 100 : 0
 }
 
-function categoryScore(guess: string, target: WordEntry) {
-  const guessedWord = wordIndex.get(guess)
-  if (!guessedWord) {
+function twoHopRelationScore(target: LexiconTerm, guess: LexiconTerm) {
+  const targetRelations = (lexicon.relationsBySource.get(target.id) ?? []).slice(0, 60)
+  let bestScore = 0
+
+  for (const firstHop of targetRelations) {
+    const secondHop = lexicon.directRelationByPair.get(getRelationKey(firstHop.targetTermId, guess.id))
+    if (!secondHop) {
+      continue
+    }
+
+    bestScore = Math.max(bestScore, firstHop.weight * secondHop.weight * 78)
+  }
+
+  return bestScore
+}
+
+function categoryScore(target: LexiconTerm, guess: LexiconTerm) {
+  if (target.category !== guess.category) {
     return 0
   }
 
-  if (guessedWord.category === target.category) {
-    return 34
-  }
-
-  const guessedTerms = new Set([...guessedWord.aliases, ...guessedWord.related, ...guessedWord.hints])
-  const targetTerms = new Set([...target.aliases, ...target.related, ...target.hints])
-  const sharedTerms = [...guessedTerms].filter((item) => targetTerms.has(item)).length
-  return Math.min(30, sharedTerms * 6)
+  const frequencyBonus = Math.min(8, Math.max(0, guess.frequency / 12))
+  return 28 + frequencyBonus
 }
 
-function lexicalScore(guess: string, target: WordEntry) {
-  return Math.max(
-    charOverlap(guess, target.word) * 62,
-    termListScore(guess, target.aliases, 92, 72),
-    termListScore(guess, target.related, 78, 54),
-    termListScore(guess, target.hints, 56, 38),
-    categoryScore(guess, target)
+function lexicalFallbackScore(targetWord: string, guessWord: string) {
+  return charOverlap(targetWord, guessWord) * 38
+}
+
+function scoreGuess(target: LexiconTerm, guessWord: string) {
+  const guessTerm = lexicon.termByWord.get(guessWord)
+
+  if (!guessTerm) {
+    return clampScore(lexicalFallbackScore(target.word, guessWord))
+  }
+
+  return clampScore(
+    Math.max(
+      directRelationScore(target, guessTerm),
+      twoHopRelationScore(target, guessTerm),
+      categoryScore(target, guessTerm),
+      lexicalFallbackScore(target.word, guessWord)
+    )
   )
 }
 
@@ -128,9 +132,7 @@ export class GuessWordService {
     }
 
     const isCorrect = normalizedWord === session.target.word
-    const similarity = isCorrect
-      ? 100
-      : clampScore(lexicalScore(normalizedWord, session.target))
+    const similarity = isCorrect ? 100 : scoreGuess(session.target, normalizedWord)
 
     return {
       word: normalizedWord,
@@ -141,7 +143,7 @@ export class GuessWordService {
   }
 
   getWordList() {
-    return words.map(({ word, category }) => ({ word, category }))
+    return playableTerms.map(({ word, category }) => ({ word, category }))
   }
 
   getDebugInfo(gameId: string) {
@@ -154,7 +156,8 @@ export class GuessWordService {
       gameId: session.gameId,
       target: session.target.word,
       category: session.target.category,
-      guessCount: session.guessCount
+      guessCount: session.guessCount,
+      totalTerms: playableTerms.length
     }
   }
 }
