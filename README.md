@@ -20,6 +20,13 @@ pnpm install
 pnpm dev
 ```
 
+如果本机未全局安装 pnpm，可使用：
+
+```bash
+npx pnpm@9.15.4 install
+npx pnpm@9.15.4 dev
+```
+
 ## 环境变量
 
 请复制 `.env.example` 为 `.env` 并按需修改配置。
@@ -31,6 +38,11 @@ pnpm dev
 pnpm build
 pnpm lint
 ```
+
+开发服务默认地址：
+
+- 前端：http://localhost:5173
+- 后端：http://localhost:3001
 
 ## 文档
 
