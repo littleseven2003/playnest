@@ -1,0 +1,126 @@
+.guessword {
+  display: grid;
+  gap: 22px;
+  width: min(760px, 100%);
+  margin: 0 auto;
+}
+
+.guessword__panel,
+.guessword__history {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.guessword__panel {
+  display: grid;
+  gap: 14px;
+  padding: 22px;
+
+  label {
+    color: var(--muted);
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+}
+
+.guessword__input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+
+  input {
+    min-width: 0;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    padding: 0 16px;
+    background: #fffdf8;
+    color: var(--ink);
+    font: inherit;
+    font-size: 1.2rem;
+  }
+
+  button {
+    min-width: 96px;
+    border: 0;
+    border-radius: 8px;
+    padding: 14px 18px;
+    background: var(--ink);
+    color: #fffdf8;
+    cursor: pointer;
+    font-weight: 800;
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+  }
+}
+
+.guessword__win,
+.form-error {
+  margin: 0;
+  font-weight: 800;
+}
+
+.guessword__win {
+  color: #1f9d7a;
+}
+
+.form-error {
+  color: #c2413a;
+}
+
+.guessword__history {
+  padding: 20px;
+}
+
+.guessword__list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.guessword__item {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) 54px;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #fffaf0;
+
+  em {
+    color: var(--muted);
+    font-style: normal;
+    font-weight: 800;
+    text-align: right;
+  }
+}
+
+.guessword__meter {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eadfca;
+
+  span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+  }
+}
+
+@media (max-width: 560px) {
+  .guessword__input-row,
+  .guessword__item {
+    grid-template-columns: 1fr;
+  }
+
+  .guessword__item em {
+    text-align: left;
+  }
+}
