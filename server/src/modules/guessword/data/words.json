@@ -1,0 +1,24 @@
+{
+  "words": [
+    { "id": 1, "word": "学习", "pinyin": "xue xi", "category": "行为", "related": ["知识", "学校", "阅读", "考试", "成长", "思考"] },
+    { "id": 2, "word": "音乐", "pinyin": "yin yue", "category": "艺术", "related": ["歌曲", "旋律", "乐器", "节奏", "演唱", "声音"] },
+    { "id": 3, "word": "旅行", "pinyin": "lv xing", "category": "生活", "related": ["风景", "城市", "出发", "地图", "假期", "远方"] },
+    { "id": 4, "word": "厨房", "pinyin": "chu fang", "category": "空间", "related": ["做饭", "食物", "锅具", "烹饪", "餐桌", "味道"] },
+    { "id": 5, "word": "电影", "pinyin": "dian ying", "category": "娱乐", "related": ["影院", "演员", "剧情", "镜头", "导演", "故事"] },
+    { "id": 6, "word": "森林", "pinyin": "sen lin", "category": "自然", "related": ["树木", "清风", "山野", "绿色", "露水", "自然"] },
+    { "id": 7, "word": "篮球", "pinyin": "lan qiu", "category": "运动", "related": ["投篮", "球场", "比赛", "运动", "得分", "队友"] },
+    { "id": 8, "word": "咖啡", "pinyin": "ka fei", "category": "饮品", "related": ["杯子", "香气", "早晨", "饮料", "苦味", "提神"] },
+    { "id": 9, "word": "编程", "pinyin": "bian cheng", "category": "技术", "related": ["代码", "程序", "开发", "逻辑", "函数", "软件"] },
+    { "id": 10, "word": "花园", "pinyin": "hua yuan", "category": "空间", "related": ["鲜花", "植物", "阳光", "草地", "浇水", "庭院"] },
+    { "id": 11, "word": "医生", "pinyin": "yi sheng", "category": "职业", "related": ["医院", "治疗", "健康", "病人", "药物", "检查"] },
+    { "id": 12, "word": "海洋", "pinyin": "hai yang", "category": "自然", "related": ["浪花", "蓝色", "船只", "鱼群", "沙滩", "潮汐"] },
+    { "id": 13, "word": "书店", "pinyin": "shu dian", "category": "空间", "related": ["书籍", "阅读", "纸张", "作者", "安静", "文字"] },
+    { "id": 14, "word": "节日", "pinyin": "jie ri", "category": "生活", "related": ["庆祝", "礼物", "团聚", "灯光", "快乐", "假期"] },
+    { "id": 15, "word": "火车", "pinyin": "huo che", "category": "交通", "related": ["车站", "轨道", "旅途", "速度", "车票", "远方"] },
+    { "id": 16, "word": "相机", "pinyin": "xiang ji", "category": "物品", "related": ["照片", "镜头", "记录", "风景", "快门", "影像"] },
+    { "id": 17, "word": "雨天", "pinyin": "yu tian", "category": "天气", "related": ["雨伞", "云朵", "潮湿", "水滴", "街道", "天气"] },
+    { "id": 18, "word": "朋友", "pinyin": "peng you", "category": "关系", "related": ["陪伴", "聊天", "信任", "聚会", "帮助", "快乐"] },
+    { "id": 19, "word": "星空", "pinyin": "xing kong", "category": "自然", "related": ["夜晚", "宇宙", "月亮", "闪烁", "银河", "天空"] },
+    { "id": 20, "word": "面包", "pinyin": "mian bao", "category": "食物", "related": ["烘焙", "早餐", "香味", "小麦", "黄油", "甜点"] }
+  ]
+}
