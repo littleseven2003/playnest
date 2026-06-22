@@ -44,6 +44,7 @@ data/
 !server/src/modules/**/data/
 !server/src/modules/**/data/*.json
 !server/src/modules/**/data/*.sqlite
+server/src/modules/**/data/source-cache/
 uploads/
 tmp/
 temp/

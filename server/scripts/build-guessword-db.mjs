@@ -1,15 +1,39 @@
-import { mkdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import https from 'node:https'
 
 const dbPath = resolve('src/modules/guessword/data/lexicon.sqlite')
-const maxTerms = Number(process.argv[2] ?? 0)
+const cacheDir = resolve('src/modules/guessword/data/source-cache')
+const targetCount = Number(process.argv[2] ?? 10000)
+const maxTerms = Math.max(8000, targetCount)
+
+const sources = {
+  jieba: {
+    url: 'https://raw.githubusercontent.com/fxsjy/jieba/master/jieba/dict.txt',
+    file: 'jieba-dict.txt'
+  },
+  xinhuaIdioms: {
+    url: 'https://raw.githubusercontent.com/pwxcoo/chinese-xinhua/master/data/idiom.json',
+    file: 'chinese-xinhua-idiom.json'
+  },
+  thuocl: [
+    ['IT', '技术', 'https://raw.githubusercontent.com/thunlp/THUOCL/master/data/THUOCL_IT.txt'],
+    ['animal', '动物', 'https://raw.githubusercontent.com/thunlp/THUOCL/master/data/THUOCL_animal.txt'],
+    ['caijing', '金融', 'https://raw.githubusercontent.com/thunlp/THUOCL/master/data/THUOCL_caijing.txt'],
+    ['car', '交通', 'https://raw.githubusercontent.com/thunlp/THUOCL/master/data/THUOCL_car.txt'],
+    ['chengyu', '成语', 'https://raw.githubusercontent.com/thunlp/THUOCL/master/data/THUOCL_chengyu.txt'],
+    ['food', '食物', 'https://raw.githubusercontent.com/thunlp/THUOCL/master/data/THUOCL_food.txt'],
+    ['law', '法律', 'https://raw.githubusercontent.com/thunlp/THUOCL/master/data/THUOCL_law.txt'],
+    ['medical', '医疗', 'https://raw.githubusercontent.com/thunlp/THUOCL/master/data/THUOCL_medical.txt']
+  ]
+}
 
 const relationWeights = {
   synonym: 0.94,
   strong: 0.78,
-  hint: 0.56,
-  sibling: 0.42
+  sibling: 0.48,
+  weak: 0.34
 }
 
 const curatedRelations = [
@@ -20,7 +44,6 @@ const curatedRelations = [
   ['医生', '护士', 'strong'],
   ['医生', '治疗', 'strong'],
   ['医生', '门诊', 'strong'],
-  ['医生', '听诊器', 'hint'],
   ['学习', '读书', 'synonym'],
   ['学习', '求学', 'synonym'],
   ['学习', '学校', 'strong'],
@@ -43,147 +66,108 @@ const curatedRelations = [
   ['银行', '贷款', 'strong']
 ]
 
-const lexiconGroups = [
-  {
-    category: '医疗',
-    words: [
-      '医生', '医师', '大夫', '医护', '护士', '医院', '诊所', '门诊', '急诊', '病房',
-      '病人', '患者', '治疗', '检查', '体检', '手术', '药物', '药品', '处方', '挂号',
-      '病历', '健康', '康复', '发烧', '感冒', '咳嗽', '头痛', '胃痛', '牙痛', '输液',
-      '针灸', '中医', '西医', '内科', '外科', '儿科', '药房', '听诊器', '白大褂', '救护车'
-    ]
-  },
-  {
-    category: '教育',
-    words: [
-      '学习', '读书', '求学', '学校', '小学', '中学', '大学', '课堂', '课程', '老师',
-      '学生', '同学', '作业', '考试', '试卷', '成绩', '分数', '知识', '阅读', '写作',
-      '语文', '数学', '英语', '历史', '地理', '物理', '化学', '生物', '教材', '课本',
-      '笔记', '练习', '复习', '预习', '毕业', '校园', '教室', '图书馆', '自习', '讲座'
-    ]
-  },
-  {
-    category: '技术',
-    words: [
-      '编程', '编码', '代码', '程序', '软件', '硬件', '算法', '数据', '网络', '网站',
-      '应用', '接口', '服务', '系统', '平台', '模型', '智能', '云端', '数据库', '服务器',
-      '浏览器', '编辑器', '终端', '键盘', '鼠标', '屏幕', '文件', '项目', '变量', '函数',
-      '组件', '路由', '缓存', '日志', '部署', '构建', '测试', '调试', '版本', '仓库'
-    ]
-  },
-  {
-    category: '交通',
-    words: [
-      '火车', '列车', '动车', '高铁', '地铁', '汽车', '公交', '出租车', '飞机', '航班',
-      '机场', '车站', '月台', '轨道', '铁路', '公路', '道路', '桥梁', '隧道', '码头',
-      '轮船', '客车', '货车', '车票', '机票', '船票', '座位', '乘客', '司机', '驾驶',
-      '出发', '到达', '换乘', '检票', '安检', '行李', '路线', '导航', '红灯', '绿灯'
-    ]
-  },
-  {
-    category: '食物',
-    words: [
-      '米饭', '面条', '面包', '馒头', '饺子', '包子', '粥', '汤', '鸡蛋', '牛奶',
-      '咖啡', '茶水', '水果', '苹果', '香蕉', '橙子', '西瓜', '葡萄', '蔬菜', '白菜',
-      '土豆', '番茄', '黄瓜', '鸡肉', '牛肉', '猪肉', '鱼肉', '海鲜', '蛋糕', '甜品',
-      '饼干', '糖果', '巧克力', '火锅', '烧烤', '炒饭', '早餐', '午餐', '晚餐', '餐厅'
-    ]
-  },
-  {
-    category: '运动',
-    words: [
-      '篮球', '足球', '排球', '网球', '乒乓球', '羽毛球', '跑步', '游泳', '骑车', '跳绳',
-      '健身', '瑜伽', '散步', '登山', '滑雪', '滑冰', '比赛', '训练', '冠军', '运动员',
-      '教练', '裁判', '队友', '球场', '操场', '跑道', '球鞋', '球衣', '得分', '投篮',
-      '射门', '传球', '防守', '进攻', '体能', '速度', '力量', '耐力', '热身', '拉伸'
-    ]
-  },
-  {
-    category: '自然',
-    words: [
-      '天空', '太阳', '月亮', '星空', '星星', '云朵', '雨天', '下雨', '大风', '雪花',
-      '雷电', '彩虹', '山峰', '森林', '树木', '花朵', '草地', '河流', '湖泊', '海洋',
-      '沙滩', '岛屿', '石头', '泥土', '空气', '清风', '阳光', '露水', '季节', '春天',
-      '夏天', '秋天', '冬天', '清晨', '黄昏', '夜晚', '天气', '温度', '潮汐', '浪花'
-    ]
-  },
-  {
-    category: '艺术',
-    words: [
-      '音乐', '歌曲', '旋律', '节奏', '乐器', '钢琴', '吉他', '唱歌', '舞蹈', '电影',
-      '影片', '演员', '导演', '剧情', '镜头', '影院', '摄影', '相机', '照片', '绘画',
-      '画画', '画笔', '颜料', '画布', '颜色', '素描', '水彩', '书法', '展览', '美术',
-      '小说', '诗歌', '戏剧', '舞台', '观众', '掌声', '创作', '作品', '风格', '灵感'
-    ]
-  },
-  {
-    category: '生活',
-    words: [
-      '家庭', '朋友', '同事', '邻居', '社区', '城市', '乡村', '街道', '房间', '厨房',
-      '卧室', '客厅', '花园', '阳台', '商店', '超市', '市场', '书店', '饭店', '酒店',
-      '节日', '生日', '礼物', '聚会', '聊天', '陪伴', '帮助', '快乐', '烦恼', '心情',
-      '工作', '休息', '睡觉', '起床', '洗澡', '购物', '旅行', '假期', '衣服', '鞋子'
-    ]
-  },
-  {
-    category: '金融',
-    words: [
-      '银行', '现金', '钱包', '账户', '存款', '取款', '转账', '贷款', '利息', '工资',
-      '奖金', '收入', '支出', '价格', '费用', '账单', '发票', '税收', '理财', '投资',
-      '股票', '基金', '保险', '资产', '债务', '信用', '密码', '银行卡', '支付宝', '预算'
-    ]
-  },
-  {
-    category: '成语',
-    words: [
-      '一心一意', '三心二意', '七上八下', '九牛一毛', '亡羊补牢', '画蛇添足', '守株待兔', '掩耳盗铃',
-      '刻舟求剑', '狐假虎威', '井底之蛙', '胸有成竹', '锦上添花', '雪中送炭', '水落石出', '柳暗花明',
-      '心平气和', '风和日丽', '春暖花开', '山清水秀', '鸟语花香', '万紫千红', '欢天喜地', '眉开眼笑',
-      '目瞪口呆', '半途而废', '坚持不懈', '专心致志', '争分夺秒', '日积月累', '举一反三', '熟能生巧'
-    ]
-  }
-]
+const stopWords = new Set([
+  '我们', '你们', '他们', '她们', '它们', '这个', '那个', '这些', '那些', '自己', '什么', '怎么',
+  '没有', '不是', '不能', '一个', '一些', '一种', '一样', '一下', '以及', '进行', '通过', '由于',
+  '为了', '因此', '但是', '然后', '如果', '所以', '已经', '可以', '可能', '应该', '需要', '时候',
+  '迅雷', '天仁'
+])
 
-const terms = []
-const seenWords = new Set()
-const termByWord = new Map()
+const terms = new Map()
 const relations = []
+const categoryBuckets = new Map()
+
+function download(url) {
+  return new Promise((resolve, reject) => {
+    https
+      .get(url, { headers: { 'User-Agent': 'playnest-lexicon-build' } }, (response) => {
+        if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+          download(response.headers.location).then(resolve, reject)
+          return
+        }
+
+        if (response.statusCode !== 200) {
+          reject(new Error(`下载失败 ${response.statusCode}: ${url}`))
+          return
+        }
+
+        const chunks = []
+        response.on('data', (chunk) => chunks.push(chunk))
+        response.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+      })
+      .on('error', reject)
+  })
+}
+
+async function readSource(source) {
+  mkdirSync(cacheDir, { recursive: true })
+  const filePath = resolve(cacheDir, source.file)
+  if (!existsSync(filePath)) {
+    const content = await download(source.url)
+    writeFileSync(filePath, content)
+  }
+  return readFileSync(filePath, 'utf8')
+}
 
 function isValidWord(word) {
-  return /^[\u4e00-\u9fa5]{2,4}$/.test(word)
+  if (!/^[\u4e00-\u9fa5]{2,4}$/.test(word) || stopWords.has(word)) {
+    return false
+  }
+
+  if (/^[一二三四五六七八九十][\u4e00-\u9fa5]{2}$/.test(word)) {
+    return false
+  }
+
+  return true
 }
 
-function addTerm(word, category, frequency = 50) {
+function classifyJiebaTag(tag) {
+  if (tag === 'i') return '成语'
+  if (tag?.startsWith('v')) return '行为'
+  if (tag?.startsWith('a')) return '形容'
+  if (tag?.startsWith('t')) return '时间'
+  if (tag?.startsWith('s')) return '空间'
+  if (tag?.startsWith('n')) return '通用'
+  return '通用'
+}
+
+function addCandidate(word, category, score, source, tag = '') {
   const normalized = word.trim()
-  if (!isValidWord(normalized) || seenWords.has(normalized)) {
-    return null
-  }
+  if (!isValidWord(normalized)) return
 
-  if (maxTerms > 0 && terms.length >= maxTerms) {
-    return null
-  }
-
-  const term = {
-    id: terms.length + 1,
-    word: normalized,
-    normalizedWord: normalized,
-    pinyin: '',
-    category,
-    frequency,
-    enabled: 1
-  }
-  seenWords.add(normalized)
-  termByWord.set(normalized, term)
-  terms.push(term)
-  return term
-}
-
-function addRelation(source, target, type, weight) {
-  if (!source || !target || source.id === target.id) {
+  const existing = terms.get(normalized)
+  if (existing) {
+    existing.score += score
+    existing.frequency = Math.max(existing.frequency, Math.round(score))
+    existing.sources.add(source)
+    existing.tags.add(tag)
+    existing.categories.set(category, (existing.categories.get(category) ?? 0) + score)
+    if (source === 'thuocl' && existing.category === '通用') existing.category = category
     return
   }
-  relations.push({ sourceId: source.id, targetId: target.id, type, weight })
-  relations.push({ sourceId: target.id, targetId: source.id, type, weight })
+
+  terms.set(normalized, {
+    word: normalized,
+    pinyin: '',
+    category,
+    score,
+    frequency: Math.round(score),
+    sources: new Set([source]),
+    tags: new Set(tag ? [tag] : []),
+    categories: new Map([[category, score]])
+  })
+}
+
+function finalizeCategories(term) {
+  let bestCategory = term.category
+  let bestScore = 0
+  for (const [category, score] of term.categories) {
+    if (score > bestScore) {
+      bestCategory = category
+      bestScore = score
+    }
+  }
+  term.category = bestCategory
 }
 
 function sharedCharCount(a, b) {
@@ -191,96 +175,250 @@ function sharedCharCount(a, b) {
   return [...new Set([...a])].filter((char) => bChars.has(char)).length
 }
 
-for (const group of lexiconGroups) {
-  for (const word of group.words) {
-    addTerm(word, group.category, group.category === '成语' ? 78 : 70)
+function relationSignature(sourceId, targetId, type) {
+  return `${sourceId}:${targetId}:${type}`
+}
+
+const relationSeen = new Set()
+
+function addRelation(source, target, type, weight) {
+  if (!source || !target || source.id === target.id) return
+
+  const forward = relationSignature(source.id, target.id, type)
+  if (!relationSeen.has(forward)) {
+    relations.push({ sourceId: source.id, targetId: target.id, type, weight })
+    relationSeen.add(forward)
+  }
+
+  const backward = relationSignature(target.id, source.id, type)
+  if (!relationSeen.has(backward)) {
+    relations.push({ sourceId: target.id, targetId: source.id, type, weight })
+    relationSeen.add(backward)
   }
 }
 
-for (const [sourceWord, targetWord, type] of curatedRelations) {
-  const source = termByWord.get(sourceWord)
-  const target = termByWord.get(targetWord)
-  addRelation(source, target, type, relationWeights[type] ?? relationWeights.strong)
+function relationScore(a, b) {
+  const shared = sharedCharCount(a.word, b.word)
+  const sameCategory = a.category === b.category
+  const samePrefix = a.word[0] === b.word[0]
+  const sameSuffix = a.word.at(-1) === b.word.at(-1)
+  let score = 0
+
+  if (sameCategory) score += 4
+  score += shared * 3
+  if (samePrefix) score += 2
+  if (sameSuffix) score += 1
+  if (a.sources.has('thuocl') && b.sources.has('thuocl')) score += 1
+
+  return score
 }
 
-for (const group of lexiconGroups) {
-  const groupTerms = terms.filter((term) => term.category === group.category)
-  for (const source of groupTerms) {
-    const candidates = groupTerms
-      .filter((target) => target.id !== source.id)
-      .map((target) => ({
-        target,
-        shared: sharedCharCount(source.word, target.word)
-      }))
-      .sort((a, b) => b.shared - a.shared || b.target.frequency - a.target.frequency)
-      .slice(0, 10)
-
-    for (const candidate of candidates) {
-      addRelation(
-        source,
-        candidate.target,
-        candidate.shared > 0 ? 'strong' : 'sibling',
-        candidate.shared > 0 ? 0.62 : relationWeights.sibling
-      )
+async function loadThuocl() {
+  for (const [name, category, url] of sources.thuocl) {
+    const content = await readSource({ url, file: `thuocl-${name}.txt` })
+    for (const line of content.split(/\r?\n/)) {
+      const [word, rawFrequency] = line.trim().split(/\s+/)
+      if (!word) continue
+      const frequency = Number(rawFrequency) || 1
+      addCandidate(word, category, Math.log10(frequency + 10) * 180, 'thuocl', name)
     }
   }
 }
 
-mkdirSync(dirname(dbPath), { recursive: true })
-rmSync(dbPath, { force: true })
-
-const db = new DatabaseSync(dbPath)
-db.exec(`
-  PRAGMA journal_mode = DELETE;
-  CREATE TABLE terms (
-    id INTEGER PRIMARY KEY,
-    word TEXT NOT NULL UNIQUE,
-    normalized_word TEXT NOT NULL UNIQUE,
-    pinyin TEXT NOT NULL DEFAULT '',
-    category TEXT NOT NULL,
-    frequency INTEGER NOT NULL DEFAULT 0,
-    enabled INTEGER NOT NULL DEFAULT 1
-  );
-  CREATE TABLE relations (
-    id INTEGER PRIMARY KEY,
-    source_term_id INTEGER NOT NULL,
-    target_term_id INTEGER NOT NULL,
-    relation_type TEXT NOT NULL,
-    weight REAL NOT NULL,
-    UNIQUE(source_term_id, target_term_id, relation_type)
-  );
-  CREATE INDEX idx_terms_normalized_word ON terms(normalized_word);
-  CREATE INDEX idx_terms_enabled ON terms(enabled, frequency);
-  CREATE INDEX idx_relations_source_target ON relations(source_term_id, target_term_id);
-  CREATE INDEX idx_relations_source ON relations(source_term_id);
-`)
-
-const insertTerm = db.prepare(`
-  INSERT INTO terms (id, word, normalized_word, pinyin, category, frequency, enabled)
-  VALUES (?, ?, ?, ?, ?, ?, ?)
-`)
-const insertRelation = db.prepare(`
-  INSERT OR IGNORE INTO relations (source_term_id, target_term_id, relation_type, weight)
-  VALUES (?, ?, ?, ?)
-`)
-
-db.exec('BEGIN')
-for (const term of terms) {
-  insertTerm.run(term.id, term.word, term.normalizedWord, term.pinyin, term.category, term.frequency, term.enabled)
+async function loadJieba() {
+  const content = await readSource(sources.jieba)
+  for (const line of content.split(/\r?\n/)) {
+    const [word, rawFrequency, tag = ''] = line.trim().split(/\s+/)
+    if (!word) continue
+    const frequency = Number(rawFrequency) || 1
+    const score = Math.log10(frequency + 10) * 42
+    addCandidate(word, classifyJiebaTag(tag), score, 'jieba', tag)
+  }
 }
-for (const relation of relations) {
-  insertRelation.run(relation.sourceId, relation.targetId, relation.type, relation.weight)
-}
-db.exec('COMMIT')
 
-const counts = db.prepare(`
-  SELECT
-    (SELECT COUNT(*) FROM terms) AS terms,
-    (SELECT COUNT(*) FROM relations) AS relations,
-    (SELECT COUNT(*) FROM terms WHERE word GLOB '*[0-9]*') AS digitTerms,
-    (SELECT COUNT(*) FROM terms WHERE length(word) < 2 OR length(word) > 4) AS invalidLengthTerms
-`).get()
-db.close()
+async function loadXinhuaIdioms() {
+  const content = await readSource(sources.xinhuaIdioms)
+  const idioms = JSON.parse(content)
+  for (const item of idioms) {
+    addCandidate(item.word, '成语', 180, 'chinese-xinhua', 'idiom')
+  }
+}
+
+function selectTerms() {
+  for (const term of terms.values()) finalizeCategories(term)
+
+  const hasProperNounTag = (term) => [...term.tags].some((tag) => /^(nr|ns|nt|nz)/.test(tag))
+
+  const categoryQuotas = new Map([
+    ['通用', 1800],
+    ['行为', 850],
+    ['形容', 650],
+    ['成语', 1600],
+    ['技术', 1200],
+    ['金融', 950],
+    ['医疗', 950],
+    ['食物', 750],
+    ['法律', 600],
+    ['交通', 450],
+    ['动物', 250],
+    ['时间', 150],
+    ['空间', 150]
+  ])
+
+  const eligible = [...terms.values()]
+    .filter((term) => {
+      if (term.sources.has('curated')) return true
+      if (term.category === '成语') return term.word.length === 4
+      if (hasProperNounTag(term)) return false
+      if (!term.sources.has('jieba')) return false
+      return term.score >= 150 || term.sources.has('thuocl')
+    })
+    .sort((a, b) => b.score - a.score || a.word.localeCompare(b.word, 'zh-Hans-CN'))
+
+  const selected = []
+  const selectedWords = new Set()
+
+  for (const term of eligible) {
+    if (term.sources.has('curated') && !selectedWords.has(term.word)) {
+      selected.push(term)
+      selectedWords.add(term.word)
+    }
+  }
+
+  for (const [category, quota] of categoryQuotas) {
+    for (const term of eligible) {
+      if (selected.length >= maxTerms) break
+      if (term.category !== category || selectedWords.has(term.word)) continue
+      if (selected.filter((item) => item.category === category).length >= quota) break
+      selected.push(term)
+      selectedWords.add(term.word)
+    }
+  }
+
+  for (const term of eligible) {
+    if (selected.length >= maxTerms) break
+    if (selectedWords.has(term.word)) continue
+    selected.push(term)
+    selectedWords.add(term.word)
+  }
+
+  selected.forEach((term, index) => {
+    term.id = index + 1
+    term.frequency = Math.round(Math.min(999999, term.score))
+    const bucket = categoryBuckets.get(term.category) ?? []
+    bucket.push(term)
+    categoryBuckets.set(term.category, bucket)
+  })
+
+  return selected
+}
+
+function buildRelations(selectedTerms) {
+  const termByWord = new Map(selectedTerms.map((term) => [term.word, term]))
+
+  for (const [sourceWord, targetWord, type] of curatedRelations) {
+    addRelation(termByWord.get(sourceWord), termByWord.get(targetWord), type, relationWeights[type] ?? relationWeights.strong)
+  }
+
+  for (const bucket of categoryBuckets.values()) {
+    for (const source of bucket) {
+      const candidates = bucket
+        .filter((target) => target.id !== source.id)
+        .map((target) => ({ target, score: relationScore(source, target) }))
+        .filter((item) => item.score >= 5)
+        .sort((a, b) => b.score - a.score || b.target.score - a.target.score)
+        .slice(0, 18)
+
+      for (const candidate of candidates) {
+        const shared = sharedCharCount(source.word, candidate.target.word)
+        const type = shared > 0 ? 'strong' : 'sibling'
+        const weight = Math.min(0.74, (type === 'strong' ? 0.52 : 0.38) + candidate.score * 0.015)
+        addRelation(source, candidate.target, type, Number(weight.toFixed(3)))
+      }
+    }
+  }
+}
+
+function loadCuratedTerms() {
+  for (const [sourceWord, targetWord, type] of curatedRelations) {
+    const score = type === 'synonym' ? 1200 : 980
+    addCandidate(sourceWord, '核心', score, 'curated', type)
+    addCandidate(targetWord, '核心', score, 'curated', type)
+  }
+}
+
+function writeDatabase(selectedTerms) {
+  mkdirSync(dirname(dbPath), { recursive: true })
+  rmSync(dbPath, { force: true })
+
+  const db = new DatabaseSync(dbPath)
+  db.exec(`
+    PRAGMA journal_mode = DELETE;
+    CREATE TABLE terms (
+      id INTEGER PRIMARY KEY,
+      word TEXT NOT NULL UNIQUE,
+      normalized_word TEXT NOT NULL UNIQUE,
+      pinyin TEXT NOT NULL DEFAULT '',
+      category TEXT NOT NULL,
+      frequency INTEGER NOT NULL DEFAULT 0,
+      enabled INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE relations (
+      id INTEGER PRIMARY KEY,
+      source_term_id INTEGER NOT NULL,
+      target_term_id INTEGER NOT NULL,
+      relation_type TEXT NOT NULL,
+      weight REAL NOT NULL,
+      UNIQUE(source_term_id, target_term_id, relation_type)
+    );
+    CREATE INDEX idx_terms_normalized_word ON terms(normalized_word);
+    CREATE INDEX idx_terms_enabled ON terms(enabled, frequency);
+    CREATE INDEX idx_relations_source_target ON relations(source_term_id, target_term_id);
+    CREATE INDEX idx_relations_source ON relations(source_term_id);
+  `)
+
+  const insertTerm = db.prepare(`
+    INSERT INTO terms (id, word, normalized_word, pinyin, category, frequency, enabled)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `)
+  const insertRelation = db.prepare(`
+    INSERT OR IGNORE INTO relations (source_term_id, target_term_id, relation_type, weight)
+    VALUES (?, ?, ?, ?)
+  `)
+
+  db.exec('BEGIN')
+  for (const term of selectedTerms) {
+    insertTerm.run(term.id, term.word, term.word, term.pinyin, term.category, term.frequency, 1)
+  }
+  for (const relation of relations) {
+    insertRelation.run(relation.sourceId, relation.targetId, relation.type, relation.weight)
+  }
+  db.exec('COMMIT')
+
+  const counts = db.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM terms) AS terms,
+      (SELECT COUNT(*) FROM relations) AS relations,
+      (SELECT COUNT(*) FROM terms WHERE word GLOB '*[0-9]*') AS digitTerms,
+      (SELECT COUNT(*) FROM terms WHERE length(word) < 2 OR length(word) > 4) AS invalidLengthTerms
+  `).get()
+  db.close()
+
+  return counts
+}
+
+await loadThuocl()
+await loadJieba()
+await loadXinhuaIdioms()
+loadCuratedTerms()
+
+const selectedTerms = selectTerms()
+if (selectedTerms.length < 8000) {
+  throw new Error(`高质量候选词不足 8000 个，当前仅 ${selectedTerms.length} 个`)
+}
+
+buildRelations(selectedTerms)
+const counts = writeDatabase(selectedTerms)
 
 console.log(`Built ${dbPath}`)
 console.log(
