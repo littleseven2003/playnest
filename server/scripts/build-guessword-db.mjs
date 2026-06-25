@@ -70,6 +70,10 @@ const stopWords = new Set([
   '我们', '你们', '他们', '她们', '它们', '这个', '那个', '这些', '那些', '自己', '什么', '怎么',
   '没有', '不是', '不能', '一个', '一些', '一种', '一样', '一下', '以及', '进行', '通过', '由于',
   '为了', '因此', '但是', '然后', '如果', '所以', '已经', '可以', '可能', '应该', '需要', '时候',
+  '其中', '方面', '目前', '同时', '开始', '出现', '认为', '表示', '问题', '情况', '地方', '东西',
+  '这方面', '那方面', '相当于', '不敢', '每周', '随时', '兀自', '子口', '正桥', '收放机',
+  '几次', '下来', '不曾',
+  '杀害', '自杀',
   '迅雷', '天仁'
 ])
 
@@ -115,6 +119,10 @@ function isValidWord(word) {
   }
 
   if (/^[一二三四五六七八九十][\u4e00-\u9fa5]{2}$/.test(word)) {
+    return false
+  }
+
+  if (/^[一二三四五六七八九十两][个只条本张次家种位名件辆台部首篇句]/.test(word)) {
     return false
   }
 
@@ -248,21 +256,23 @@ function selectTerms() {
   for (const term of terms.values()) finalizeCategories(term)
 
   const hasProperNounTag = (term) => [...term.tags].some((tag) => /^(nr|ns|nt|nz)/.test(tag))
+  const commonCategories = new Set(['通用', '行为', '形容', '时间', '空间'])
 
-  const categoryQuotas = new Map([
-    ['通用', 1800],
-    ['行为', 850],
-    ['形容', 650],
-    ['成语', 1600],
-    ['技术', 1200],
-    ['金融', 950],
-    ['医疗', 950],
-    ['食物', 750],
-    ['法律', 600],
-    ['交通', 450],
-    ['动物', 250],
-    ['时间', 150],
-    ['空间', 150]
+  const categoryCaps = new Map([
+    ['通用', 2700],
+    ['行为', 1400],
+    ['形容', 850],
+    ['成语', 1800],
+    ['食物', 650],
+    ['技术', 550],
+    ['医疗', 550],
+    ['金融', 550],
+    ['法律', 260],
+    ['交通', 240],
+    ['动物', 30],
+    ['时间', 180],
+    ['空间', 120],
+    ['核心', 50]
   ])
 
   const eligible = [...terms.values()]
@@ -271,35 +281,46 @@ function selectTerms() {
       if (term.category === '成语') return term.word.length === 4
       if (hasProperNounTag(term)) return false
       if (!term.sources.has('jieba')) return false
-      return term.score >= 150 || term.sources.has('thuocl')
+      if (commonCategories.has(term.category)) return term.score >= 105
+      return term.score >= 190 || (term.sources.has('thuocl') && term.score >= 150)
     })
     .sort((a, b) => b.score - a.score || a.word.localeCompare(b.word, 'zh-Hans-CN'))
 
   const selected = []
   const selectedWords = new Set()
+  const selectedCounts = new Map()
+
+  function canSelect(term) {
+    const cap = categoryCaps.get(term.category) ?? 250
+    return (selectedCounts.get(term.category) ?? 0) < cap
+  }
+
+  function selectTerm(term) {
+    selected.push(term)
+    selectedWords.add(term.word)
+    selectedCounts.set(term.category, (selectedCounts.get(term.category) ?? 0) + 1)
+  }
 
   for (const term of eligible) {
     if (term.sources.has('curated') && !selectedWords.has(term.word)) {
-      selected.push(term)
-      selectedWords.add(term.word)
+      selectTerm(term)
     }
   }
 
-  for (const [category, quota] of categoryQuotas) {
+  for (const [category] of categoryCaps) {
     for (const term of eligible) {
       if (selected.length >= maxTerms) break
       if (term.category !== category || selectedWords.has(term.word)) continue
-      if (selected.filter((item) => item.category === category).length >= quota) break
-      selected.push(term)
-      selectedWords.add(term.word)
+      if (!canSelect(term)) break
+      selectTerm(term)
     }
   }
 
   for (const term of eligible) {
     if (selected.length >= maxTerms) break
     if (selectedWords.has(term.word)) continue
-    selected.push(term)
-    selectedWords.add(term.word)
+    if (!canSelect(term)) continue
+    selectTerm(term)
   }
 
   selected.forEach((term, index) => {
